@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "fluentd-loki.fullname" . }}
+  labels:
+    app: {{ template "fluentd-loki.name" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    heritage: "{{ .Release.Service }}"
+    release: "{{ .Release.Name }}"
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "fluentd-loki.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fluentd-loki.name" . }}
+        release: "{{ .Release.Name }}"
+    spec:
+      nodeSelector:
+        role: master
+      tolerations:
+      # Tolerate master taint
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      serviceAccountName: {{ template "fluentd-loki.fullname" . }}
+      containers:
+      - name: {{ template "fluentd-loki.fullname" . }}
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: Always
+        env:
+        - name: LOKI_USERNAME
+          value: {{ .Values.loki.username }}
+        - name: LOKI_URL
+          value: {{ .Values.loki.url }}
+        - name: LOKI_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: loki_password
+              name: {{ template "fluentd-loki.fullname" . }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: config-volume
+          mountPath: /fluentd/etc
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: config-volume
+        configMap:
+          name: {{ template "fluentd-loki.fullname" . }}
